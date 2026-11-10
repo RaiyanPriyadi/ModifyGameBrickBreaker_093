@@ -1,4 +1,6 @@
 import tkinter as tk
+import math
+import random
 
 class GameObject(object):
     def __init__(self, canvas, item):
@@ -16,195 +18,79 @@ class GameObject(object):
 
 class Ball(GameObject):
     def __init__(self, canvas, x, y):
-        self.radius = 10
-        self.direction = [1, -1]
-        self.speed = 10
+        self.radius = 8 # Diperkecil sedikit agar lebih elegan
+        # Arah awal diacak sedikit agar tidak monoton
+        self.direction = [random.choice([0.5, -0.5, 1, -1]), -1]
+        self._normalize_direction()
+        self.speed = 7.0
         item = canvas.create_oval(x-self.radius, y-self.radius,
                                   x+self.radius, y+self.radius,
-                                  fill='white')
+                                  fill='#ecf0f1', outline='#bdc3c7')
         super(Ball, self).__init__(canvas, item)
+
+    def _normalize_direction(self):
+        # Memastikan kecepatan bola konstan di segala arah menggunakan vektor
+        length = math.hypot(self.direction[0], self.direction[1])
+        if length == 0:
+            self.direction = [0, -1]
+            length = 1
+        self.direction[0] /= length
+        self.direction[1] /= length
 
     def update(self):
         coords = self.get_position()
         width = self.canvas.winfo_width()
+        
+        # Pantulan dinding kiri/kanan
         if coords[0] <= 0 or coords[2] >= width:
             self.direction[0] *= -1
+            # Mencegah bola menempel di dinding
+            if coords[0] <= 0:
+                self.canvas.move(self.item, 1, 0)
+            else:
+                self.canvas.move(self.item, -1, 0)
+                
+        # Pantulan atap
         if coords[1] <= 0:
             self.direction[1] *= -1
+            
         x = self.direction[0] * self.speed
         y = self.direction[1] * self.speed
         self.move(x, y)
 
-    def collide(self, game_objects):
+    def collide(self, game_objects, paddle):
         coords = self.get_position()
         x = (coords[0] + coords[2]) * 0.5
-        if len(game_objects) > 1:
-            self.direction[1] *= -1
-        elif len(game_objects) == 1:
-            game_object = game_objects[0]
-            coords = game_object.get_position()
-            if x > coords[2]:
-                self.direction[0] = 1
-            elif x < coords[0]:
-                self.direction[0] = -1
-            else:
-                self.direction[1] *= -1
+        y = (coords[1] + coords[3]) * 0.5
+        
+        hit_brick = False
 
         for game_object in game_objects:
-            if isinstance(game_object, Brick):
-                game_object.hit()
-
-class Paddle(GameObject):
-    def __init__(self, canvas, x, y):
-        self.width = 100 # Diperlebar agar lebih mudah memantulkan bola
-        self.height = 10
-        self.ball = None
-        item = canvas.create_rectangle(x - self.width / 2,
-                                       y - self.height / 2,
-                                       x + self.width / 2,
-                                       y + self.height / 2,
-                                       fill='#f1c40f') # Warna kuning cerah
-        super(Paddle, self).__init__(canvas, item)
-
-    def set_ball(self, ball):
-        self.ball = ball
-
-    def move(self, offset):
-        coords = self.get_position()
-        width = self.canvas.winfo_width()
-        if coords[0] + offset >= 0 and coords[2] + offset <= width:
-            super(Paddle, self).move(offset, 0)
-            if self.ball is not None:
-                self.ball.move(offset, 0)
-
-class Brick(GameObject):
-    # 1. Menambahkan Class Attribute untuk Warna
-    COLORS = {1: '#2ecc71', 2: '#3498db', 3: '#e74c3c'} # Hijau, Biru, Merah
-
-    def __init__(self, canvas, x, y, hits):
-        self.width = 75
-        self.height = 20
-        self.hits = hits # 2. Instance attribute untuk menyimpan nyawa bata
-        color = Brick.COLORS[hits]
-        # ... kode pembuat bentuk bata ...
-
-    def hit(self):
-        self.hits -= 1 # 3. Mengurangi nyawa bata tiap tertabrak
-        if self.hits == 0:
-            self.delete() # Jika nyawa habis, bata dihapus
-        else:
-            # Jika nyawa masih ada, ubah warna bata sesuai sisa hit
-            self.canvas.itemconfig(self.item, fill=Brick.COLORS[self.hits])
-
-class Game(tk.Frame):
-    def __init__(self, master):
-        super(Game, self).__init__(master)
-        self.lives = 3
-        self.score = 0 # Modifikasi: Atribut skor baru
-        self.width = 610
-        self.height = 400
-        # Latar belakang gelap agar elemen permainan menonjol
-        self.canvas = tk.Canvas(self, bg='#2c3e50',
-                                width=self.width,
-                                height=self.height)
-        self.canvas.pack()
-        self.pack()
-
-        self.items = {}
-        self.ball = None
-        self.paddle = Paddle(self.canvas, self.width/2, 326)
-        self.items[self.paddle.item] = self.paddle
-        
-        # Modifikasi: Menambahkan lebih banyak baris bata dengan variasi kekuatan
-        for x in range(5, self.width - 5, 75):
-            self.add_brick(x + 37.5, 50, 3) # Baris atas: 3 hits
-            self.add_brick(x + 37.5, 70, 2) # Baris kedua: 2 hits
-            self.add_brick(x + 37.5, 90, 1) # Baris ketiga: 1 hit
-            self.add_brick(x + 37.5, 110, 1) # Baris bawah: 1 hit
-
-        self.hud = None
-        self.score_hud = None # HUD tambahan untuk skor
-        self.setup_game()
-        self.canvas.focus_set()
-        
-        # Kecepatan paddle ditingkatkan dari 10 ke 20
-        self.canvas.bind('<Left>', lambda _: self.paddle.move(-20))
-        self.canvas.bind('<Right>', lambda _: self.paddle.move(20))
-
-    def setup_game(self):
-        self.add_ball()
-        self.update_lives_text()
-        self.update_score_text() # Menampilkan teks skor di layar
-        self.text = self.draw_text(300, 200, 'Press Space to start')
-        self.canvas.bind('<space>', lambda _: self.start_game())
-
-    def add_ball(self):
-        if self.ball is not None:
-            self.ball.delete()
-        paddle_coords = self.paddle.get_position()
-        x = (paddle_coords[0] + paddle_coords[2]) * 0.5
-        self.ball = Ball(self.canvas, x, 310)
-        self.paddle.set_ball(self.ball)
-
-    def add_brick(self, x, y, hits):
-        brick = Brick(self.canvas, x, y, hits)
-        self.items[brick.item] = brick
-
-    def draw_text(self, x, y, text, size='40'):
-        font = ('Helvetica', size)
-        return self.canvas.create_text(x, y, text=text, font=font, fill='white')
-
-    def update_lives_text(self):
-        text = 'Lives: %s' % self.lives
-        if self.hud is None:
-            self.hud = self.draw_text(50, 20, text, 15)
-        else:
-            self.canvas.itemconfig(self.hud, text=text)
-
-    # Modifikasi: Fungsi untuk memperbarui tampilan teks skor
-    def update_score_text(self):
-        text = 'Score: %s' % self.score
-        if self.score_hud is None:
-            self.score_hud = self.draw_text(550, 20, text, 15)
-        else:
-            self.canvas.itemconfig(self.score_hud, text=text)
-
-    def start_game(self):
-        self.canvas.unbind('<space>')
-        self.canvas.delete(self.text)
-        self.paddle.ball = None
-        self.game_loop()
-
-    def game_loop(self):
-        self.check_collisions()
-        num_bricks = len(self.canvas.find_withtag('brick'))
-        if num_bricks == 0: 
-            self.ball.speed = None
-            self.draw_text(300, 200, 'You win!')
-        elif self.ball.get_position()[3] >= self.height: 
-            self.ball.speed = None
-            self.lives -= 1
-            if self.lives < 0:
-                self.draw_text(300, 200, 'You Lose!!! Game Over!')
-            else:
-                self.after(1000, self.setup_game)
-        else:
-            self.ball.update()
-            self.after(50, self.game_loop)
-
-    def check_collisions(self):
-        ball_coords = self.ball.get_position()
-        items = self.canvas.find_overlapping(*ball_coords)
-        objects = [self.items[x] for x in items if x in self.items]
-        self.ball.collide(objects)
-        
-        # Modifikasi: Logika untuk menambahkan skor
-        for obj in objects:
-            if isinstance(obj, Brick):
-                self.score += 10
-                self.update_score_text()
+            if isinstance(game_object, Paddle):
+                # FISIKA PANTULAN DINAMIS: Sudut tergantung letak benturan di paddle
+                paddle_coords = game_object.get_position()
+                paddle_center = (paddle_coords[0] + paddle_coords[2]) / 2
                 
-                # Kecepatan bola bertambah setiap skor kelipatan 100
-                if self.score % 100 == 0:
-                    self.ball.speed += 0.5
+                # Offset bernilai antara -1 (kiri) sampai 1 (kanan)
+                offset = (x - paddle_center) / (game_object.width / 2)
+                
+                self.direction[0] = offset * 1.5 # Sensitivitas pantulan
+                self.direction[1] = -1 # Selalu pantul ke atas
+                self._normalize_direction()
+                
+            elif isinstance(game_object, Brick):
+                # PERBAIKAN: Ambil koordinat SEBELUM bata dihancurkan
+                b_coords = game_object.get_position() 
+                
+                game_object.hit()
+                hit_brick = True
+                
+                # PERBAIKAN: Cek apakah koordinat valid sebelum memantulkan bola
+                if len(b_coords) == 4:
+                    if x < b_coords[0] or x > b_coords[2]:
+                        self.direction[0] *= -1
+                    else:
+                        self.direction[1] *= -1
+
+        return hit_brick
 
