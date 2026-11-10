@@ -1,4 +1,5 @@
 ![alt text](image.png)
+![alt text](image-1.png)
 
 1. Fisika Pantulan Dinamis (Dynamic Paddle Bounce)
 Modifikasi: Sebelumnya, bola hanya berbalik arah Y jika mengenai paddle. Sekarang, sudut pantulan bola berubah tergantung di bagian mana bola mengenai paddle (tengah lurus, pinggir menyamping). Algoritma math.hypot digunakan untuk menjaga kecepatan konstan.

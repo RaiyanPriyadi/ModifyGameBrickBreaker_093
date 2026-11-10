@@ -183,7 +183,7 @@ class Game(tk.Frame):
         
         self.update_paddle_movement()
 
- def generate_level(self):
+    def generate_level(self):
         # Membersihkan bata lama jika ada
         for item in self.canvas.find_withtag('brick'):
             self.canvas.delete(item)
@@ -319,3 +319,10 @@ class Game(tk.Frame):
             
         if hit_brick or any(isinstance(obj, Paddle) for obj in objects):
             self.update_hud()
+
+if __name__ == '__main__':
+    root = tk.Tk()
+    root.title('Pro Brick Breaker')
+    root.resizable(False, False) # Mencegah window di-resize agar UI tidak rusak
+    game = Game(root)
+    game.mainloop()
