@@ -182,3 +182,140 @@ class Game(tk.Frame):
         self.canvas.bind('<KeyRelease-Right>', self.release_right)
         
         self.update_paddle_movement()
+
+ def generate_level(self):
+        # Membersihkan bata lama jika ada
+        for item in self.canvas.find_withtag('brick'):
+            self.canvas.delete(item)
+            
+        self.items = {self.paddle.item: self.paddle}
+        
+        # Semakin tinggi level, semakin banyak nyawa bata
+        rows = min(6, 3 + self.level)
+        for row in range(rows):
+            for x in range(5, self.width - 5, 75):
+                hits = min(5, rows - row + (self.level // 2))
+                self.add_brick(x + 37.5, 60 + (row * 25), hits)
+
+    def press_left(self, event): self.left_pressed = True
+    def release_left(self, event): self.left_pressed = False
+    def press_right(self, event): self.right_pressed = True
+    def release_right(self, event): self.right_pressed = False
+
+    def update_paddle_movement(self):
+        if self.left_pressed:
+            self.paddle.move(-12)
+        if self.right_pressed:
+            self.paddle.move(12)
+        self.after(20, self.update_paddle_movement)
+
+    def setup_game(self):
+        self.add_ball()
+        self.update_hud()
+        self.text = self.draw_text(self.width/2, self.height/2 + 30, 'Press SPACE to Start\nUse LEFT/RIGHT Arrows', size=20)
+        self.canvas.bind('<space>', lambda _: self.start_game())
+
+    def add_ball(self):
+        if self.ball is not None:
+            self.ball.delete()
+        paddle_coords = self.paddle.get_position()
+        x = (paddle_coords[0] + paddle_coords[2]) * 0.5
+        self.ball = Ball(self.canvas, x, paddle_coords[1] - 15)
+        # Menyesuaikan kecepatan bola dengan level
+        self.ball.speed = 6.0 + (self.level * 0.5) 
+        self.paddle.set_ball(self.ball)
+
+    def add_brick(self, x, y, hits):
+        brick = Brick(self.canvas, x, y, hits)
+        self.items[brick.item] = brick
+
+    def draw_text(self, x, y, text, size='40'):
+        font = ('Consolas', size, 'bold')
+        return self.canvas.create_text(x, y, text=text, font=font, fill='#ecf0f1', justify=tk.CENTER)
+
+    def update_hud(self):
+        # Lives
+        lives_txt = f'❤ {self.lives}'
+        if self.hud is None:
+            self.hud = self.draw_text(40, 20, lives_txt, 14)
+            self.canvas.itemconfig(self.hud, fill='#e74c3c')
+        else:
+            self.canvas.itemconfig(self.hud, text=lives_txt)
+            
+        # Score
+        score_txt = f'SCORE: {self.score:05d}'
+        if self.score_hud is None:
+            self.score_hud = self.draw_text(self.width/2, 20, score_txt, 14)
+        else:
+            self.canvas.itemconfig(self.score_hud, text=score_txt)
+
+        # Level
+        level_txt = f'LEVEL: {self.level}'
+        if self.level_hud is None:
+            self.level_hud = self.draw_text(self.width - 60, 20, level_txt, 14)
+        else:
+            self.canvas.itemconfig(self.level_hud, text=level_txt)
+
+        # Combo
+        combo_txt = f'{self.combo}x COMBO!' if self.combo > 1 else ''
+        if self.combo_hud is None:
+            self.combo_hud = self.draw_text(self.width/2, 45, combo_txt, 12)
+            self.canvas.itemconfig(self.combo_hud, fill='#f1c40f')
+        else:
+            self.canvas.itemconfig(self.combo_hud, text=combo_txt)
+
+    def start_game(self):
+        self.canvas.unbind('<space>')
+        self.canvas.delete(self.text)
+        self.paddle.ball = None
+        self.game_loop()
+
+    def game_loop(self):
+        self.check_collisions()
+        num_bricks = len(self.canvas.find_withtag('brick'))
+        
+        if num_bricks == 0: 
+            # LOGIKA NAIK LEVEL
+            self.ball.speed = None
+            self.level += 1
+            self.combo = 1
+            self.text = self.draw_text(self.width/2, self.height/2, f'LEVEL {self.level} CLEARED!', 25)
+            self.after(2000, self.start_next_level)
+            
+        elif self.ball.get_position()[3] >= self.height: 
+            self.ball.speed = None
+            self.lives -= 1
+            self.combo = 1
+            if self.lives < 0:
+                self.canvas.delete(self.combo_hud)
+                self.draw_text(self.width/2, self.height/2 - 20, 'GAME OVER', 35)
+                self.draw_text(self.width/2, self.height/2 + 30, f'Final Score: {self.score}', 18)
+            else:
+                self.after(1000, self.setup_game)
+        else:
+            self.ball.update()
+            self.after(16, self.game_loop) # ~60 FPS
+
+    def start_next_level(self):
+        self.canvas.delete(self.text)
+        self.generate_level()
+        self.setup_game()
+
+    def check_collisions(self):
+        ball_coords = self.ball.get_position()
+        items = self.canvas.find_overlapping(*ball_coords)
+        objects = [self.items[x] for x in items if x in self.items]
+        
+        # Mengecek apakah bola mengenai paddle atau bata
+        hit_brick = self.ball.collide(objects, self.paddle)
+        
+        # Logika Combo & Score
+        if any(isinstance(obj, Paddle) for obj in objects):
+            self.combo = 1 # Reset combo jika menyentuh paddle
+            
+        if hit_brick:
+            self.score += (10 * self.combo)
+            self.combo += 1
+            
+        if hit_brick or any(isinstance(obj, Paddle) for obj in objects):
+            self.update_hud()
